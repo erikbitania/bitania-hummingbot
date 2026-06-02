@@ -1,0 +1,98 @@
+# CI for the Bitania Hummingbot connector.
+#
+# This file travels to the PUBLIC connector repo via `git subtree push` (it sits
+# under the published `hummingbot/` prefix), so it runs on the GitHub mirror used
+# for the eventual official NCP PR. Two jobs:
+#
+#   * lint      — flake8 + byte-compile of the connector sources. Self-contained,
+#                 needs nothing from the Hummingbot framework. This is the gate
+#                 that always runs green and catches syntax/style regressions.
+#   * unit-tests — copies the connector + tests into a pinned Hummingbot source
+#                 checkout and runs the bitania test suite (aioresponses +
+#                 NetworkMockingAssistant; no live network). It exists because
+#                 the connector targets Hummingbot's moving API surface and the
+#                 6 `# NOTE: version-sensitive` spots must be validated against a
+#                 real, pinned version.
+#
+# ⚠️ FIRST-RUN VALIDATION REQUIRED: the unit-tests job has not yet been executed
+# against a real Hummingbot checkout in CI. Bump HUMMINGBOT_REF to the version
+# you want to support, run it once, and reconcile any of the version-sensitive
+# NOTEs the suite surfaces. Until it's green once, treat it as informational
+# (continue-on-error keeps it from blocking lint).
+name: connector-tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  # Single pin point for the supported Hummingbot version. Use a release tag for
+  # reproducibility (e.g. a dated release) rather than a moving branch.
+  HUMMINGBOT_REF: master
+  CONNECTOR_PKG: hummingbot/connector/exchange/bitania
+  TEST_PKG: test/hummingbot/connector/exchange/bitania
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - name: Install linters
+        run: pip install flake8
+      - name: Byte-compile connector sources
+        run: python -m compileall -q ${{ env.CONNECTOR_PKG }}
+      - name: flake8 (errors only)
+        # Match Hummingbot's own lenient line length; fail only on real errors.
+        run: flake8 ${{ env.CONNECTOR_PKG }} --count --max-line-length=120 --extend-ignore=E203,W503 --show-source --statistics
+
+  unit-tests:
+    runs-on: ubuntu-latest
+    # Manual-trigger only (Actions tab → "Run workflow"): this job needs a full
+    # pinned Hummingbot source build and is where the version-sensitive NOTEs get
+    # reconciled. Until it's been validated green once, it does not run on every
+    # push (so routine pushes are gated by `lint` alone). Run it via workflow_dispatch.
+    if: github.event_name == 'workflow_dispatch'
+    # Best-effort until validated once against a pinned ref — see header note.
+    continue-on-error: true
+    defaults:
+      run:
+        shell: bash -el {0}
+    steps:
+      - name: Checkout connector repo
+        uses: actions/checkout@v4
+        with:
+          path: connector
+
+      - name: Checkout Hummingbot (${{ env.HUMMINGBOT_REF }})
+        uses: actions/checkout@v4
+        with:
+          repository: hummingbot/hummingbot
+          ref: ${{ env.HUMMINGBOT_REF }}
+          path: hummingbot
+
+      - name: Set up conda env from Hummingbot's environment file
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          miniforge-version: latest
+          activate-environment: hummingbot
+          environment-file: hummingbot/setup/environment.yml
+          auto-activate-base: false
+
+      - name: Build Hummingbot (compiles Cython extensions)
+        working-directory: hummingbot
+        run: ./compile
+
+      - name: Copy the Bitania connector + tests into the Hummingbot tree
+        run: |
+          cp -r "connector/${CONNECTOR_PKG}/." "hummingbot/${CONNECTOR_PKG}/"
+          mkdir -p "hummingbot/$(dirname "${TEST_PKG}")"
+          cp -r "connector/${TEST_PKG}/." "hummingbot/${TEST_PKG}/"
+
+      - name: Run the Bitania connector unit tests
+        working-directory: hummingbot
+        run: python -m pytest "${TEST_PKG}" -q

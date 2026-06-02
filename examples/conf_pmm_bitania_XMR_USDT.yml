@@ -1,0 +1,93 @@
+########################################################
+###   Bitania — pure_market_making sample (XMR-USDT) ###
+########################################################
+#
+# Conservative starter config for market making XMR-USDT on Bitania via the
+# community Hummingbot connector. Small size, modest spreads, slow refresh.
+#
+# HOW TO USE
+#   1. connect bitania            (paste your X-API-Key / X-API-Secret)
+#   2. config paper_trade_enabled True     <-- TEST RISK-FREE FIRST
+#   3. import conf_pmm_bitania_XMR_USDT.yml
+#   4. start
+#   5. once happy: config paper_trade_enabled False  -> restart to go live
+#
+# Tune bid_spread / ask_spread / order_amount / order_refresh_time to taste,
+# and always re-test changes in paper_trade mode before risking real funds.
+#
+# Fees: Bitania maker 0.15% / taker 0.25% (standard). The MM Program can rebate
+# the maker fee to 0% — using LIMIT_MAKER (post-only, set below) keeps you on the
+# maker side so you pay the lower/rebated rate.
+
+template_version: 24
+strategy: pure_market_making
+
+# Exchange + market
+exchange: bitania
+market: XMR-USDT
+
+# Quote each side ~0.5% away from mid (≈1.0% round-trip, comfortably above the
+# 0.15% maker fee). Widen these if XMR-USDT is volatile or thin.
+bid_spread: 0.5
+ask_spread: 0.5
+
+# Optional hard floor on spread (leave at default).
+minimum_spread: -100.0
+
+# Refresh (cancel + re-place) every 45s. Slower refresh = fewer cancels and less
+# adverse churn; faster = tighter tracking of price moves.
+order_refresh_time: 45.0
+max_order_age: 1800.0
+# Don't re-quote on tiny refreshes if price barely moved (in % of price).
+order_refresh_tolerance_pct: 0.1
+
+# Order size, in the BASE asset (XMR). Start small.
+order_amount: 0.05
+
+# Single order level per side (simple + conservative). Increase order_levels to
+# build a layered book once you're comfortable.
+order_levels: 1
+order_level_amount: 0.0
+order_level_spread: 0.0
+
+# Inventory skew: off by default (keep it simple). Enable + set a target % later
+# to lean the book toward your desired XMR/USDT balance split.
+inventory_skew_enabled: false
+inventory_target_base_pct: 50.0
+inventory_range_multiplier: 1.0
+inventory_price: 1.0
+
+# Alternate buy/sell after each fill to avoid one-sided inventory drift on a
+# trending market — sensible for a conservative starter.
+ping_pong_enabled: true
+
+# Wait 30s after a fill before placing the next order on that side (lets the book
+# settle, reduces getting picked off repeatedly).
+filled_order_delay: 30.0
+
+# Maker-only: post-only orders are rejected if they'd cross the spread, so you
+# never accidentally pay the taker fee. Maps to Bitania timeInForce=post_only.
+hanging_orders_enabled: false
+hanging_orders_cancel_pct: 10.0
+order_optimization_enabled: false
+ask_order_optimization_depth: 0.0
+bid_order_optimization_depth: 0.0
+add_transaction_costs: true
+price_source: current_market
+price_type: mid_price
+price_source_exchange: ''
+price_source_market: ''
+price_source_custom_api: ''
+custom_api_update_interval: 5.0
+take_if_crossed: false
+
+# Place maker (post-only) orders. With this true, Hummingbot uses LIMIT_MAKER,
+# which the Bitania connector submits as post_only — orders that would take
+# liquidity are rejected instead of crossing.
+moving_price_band_enabled: false
+price_ceiling: -1.0
+price_floor: -1.0
+price_band_refresh_time: 86400.0
+
+# Status reporting
+status_report_interval: 900.0

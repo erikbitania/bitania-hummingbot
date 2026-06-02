@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+build/
+dist/
+
+# Cython build artifacts (dummy.pxd/pyx compile in-tree under Hummingbot)
+*.c
+*.so
+
+# Local env / editor
+.venv/
+venv/
+.env
+.DS_Store
+.idea/
+.vscode/
